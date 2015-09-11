@@ -41,18 +41,41 @@ class CheckDockerContainers < Sensu::Plugin::Check::CLI
   option :image,
          short: '-i image',
          default: "nyxcharon/docker-audit"
+  option :memory,
+         short: '-m 256m',
+         defaults: 'inf'
+  option :cpushares,
+         short: '-s 256',
+         defaults: '1024'
+  option :cpucores,
+         short: '-c 0',
+         defaults: '0-3'
+  option :volume,
+         short: '-v volume',
+         defaults: ''
+
 
   def run #rubocop:disable all
       if not config[:hound] and not config[:list]
         warning "Must specify either hound url or list"
       end
 
-      #Run the docker-audit container
+      #Build the command string and then run the docker-audit container
       output=""
+      command = "docker run --privileged -m #{config[:memory]} --cpuset-cpus=#{config[:cpucores]} --cpu-shares=#{config[:cpushares]} -e LOG=file  --entrypoint wrapdocker  --rm "
+      if config[:volume]
+        command += " -v #{config[:volume]}"
+      end
+      command += " #{config[:image]} docker-audit -v "
+
       if config[:hound]
-        output=%x[docker run --privileged -e LOG=file --entrypoint wrapdocker --rm "#{config[:image]}"  docker-audit -h "#{config[:hound]}"]
+        command += " -h \"#{config[:hound]}\""
+      else
+        command += "-l #{config[:list]}"
       end
 
+      output=%x[#{command}]
+      puts output
       if output.include?("Audit Passed")
         ok "Audit Passed"
       else
